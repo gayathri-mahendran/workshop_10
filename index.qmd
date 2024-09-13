@@ -1,0 +1,173 @@
+---
+title: "Influenza A H7N9 in China, 2013"
+format: dashboard
+theme: lux
+---
+
+```{r include=FALSE}
+# Load packages 
+if(!require(pacman)) install.packages("pacman")
+pacman::p_load(tidyverse, outbreaks, bslib, bsicons, shiny, 
+               rgeoboundaries, plotly, htmltools, reactable,
+               sf)
+
+# view data
+head(outbreaks::fluH7N9_china_2013)
+```
+
+```{r include=FALSE}
+flu_dataset <- outbreaks::fluH7N9_china_2013
+
+total_cases <- nrow(flu_dataset)
+
+total_hosp <- flu_dataset %>% 
+  filter(!is.na(date_of_hospitalisation)) %>%  
+  nrow()
+
+total_deaths <- flu_dataset %>% 
+  filter(outcome == "Death") %>% 
+  nrow()
+```
+
+```{r include=FALSE}
+graph <- flu_dataset %>% 
+  group_by(province) %>% 
+  count() %>% 
+  arrange(-n) %>% 
+  mutate(tooltip_label = paste(province, 
+                               n, 
+                               sep = ": ")) %>% 
+  ggplot(mapping = aes(x = n, 
+                       y = fct_reorder(province, n),
+                       text = tooltip_label)) +
+  geom_col(fill = "#4682B4") +
+  labs(x = "Number of cases",
+       y = element_blank()) +
+  theme_minimal()
+```
+
+```{r include=FALSE}
+china_map_data <- gb_adm1(country = "china")
+
+cases_summary_province <- flu_dataset %>% 
+  count(province, name = "total_cases")
+
+ggplot() +
+  geom_sf(data = china_map_data) 
+
+setdiff(china_map_data$shapeName,
+        flu_dataset$province)
+
+setdiff(flu_dataset$province,
+        china_map_data$shapeName)
+
+
+china_map_data <- china_map_data %>% 
+  mutate(shapeName = str_trim(str_remove(shapeName,
+                                "Province|Autonomous Region|Municipality")))
+flu_dataset %>% 
+  count(province)
+
+setdiff(china_map_data$shapeName,
+        flu_dataset$province)
+setdiff(flu_dataset$province,
+        china_map_data$shapeName)
+
+china_map_data <- china_map_data %>% 
+  mutate(shapeName = case_when(
+    shapeName == "Guangzhou" ~ "Guangdong",
+    TRUE ~ shapeName
+  ))
+
+setdiff(flu_dataset$province,
+        china_map_data$shapeName)
+
+
+
+joined_data <- left_join(china_map_data,
+          cases_summary_province,
+          by = c("shapeName" = "province")) %>% 
+  mutate(tooltip_label = paste0(shapeName, 
+                                sep = ": ",
+                               total_cases 
+                               ))
+
+
+
+
+mapped_plot <- joined_data %>% 
+  ggplot() +
+  geom_sf(aes(fill = total_cases,
+              text = tooltip_label)) +
+  theme_void() +
+  theme(legend.position = "none")
+
+
+
+ggplotly_map <- ggplotly(mapped_plot,
+         tooltip = "text")
+
+```
+
+
+# HOME 
+
+## Row 1 {height=20%}
+```{r}
+value_box(
+  title = "Total Cases",
+  value = total_cases,
+  showcase = bsicons::bs_icon("virus"),
+  theme = value_box_theme(bg = "#518FD6")
+)
+```
+
+```{r}
+value_box(
+  title = "Total Hospitalizations",
+  value = total_hosp,
+  showcase = bsicons::bs_icon("hospital"),
+  theme = value_box_theme(bg = "#214773")
+)
+```
+
+```{r}
+value_box(
+  title = "Total Deaths",
+  value = total_deaths,
+  showcase = bsicons::bs_icon("file-medical"),
+  theme = value_box_theme(bg = "#3F71AB")
+)
+```
+
+
+
+## Row 2{height=80%}
+
+### {width=35%}
+```{r title = "Number of cases by Province"}
+ggplotly(graph,
+         tooltip = "text")
+```
+
+### {width=65%}
+```{r title = "Map of Provinces by Number of Cases"}
+ggplotly_map
+```
+
+# DOWNLOAD DATA
+```{r}
+
+htmltools::browsable(
+  tagList(
+    reactable(
+      outbreaks::fluH7N9_china_2013,
+      elementId = "flu-dataset",
+      searchable = T,
+      filterable = T    
+    ),
+    tags$button("Download as CSV", 
+                onclick = "Reactable.downloadDataCSV('flu-dataset')"),
+  )
+)
+```
